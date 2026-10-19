@@ -1,0 +1,19 @@
+# Datos de pacientes: nunca se suben
+estudios/
+*.zip
+*.dcm
+*.nii
+*.nii.gz
+*.npz
+
+# Binarios y compilacion
+instalador/
+dist/
+build/
+app/herramientas/
+*.exe
+
+__pycache__/
+*.pyc
+.venv/
+venv/

@@ -1,0 +1,716 @@
+﻿<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<title>Reconstruccion 3D - TAC abdomen y pelvis</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { --bg: #0d1117; --panel: rgba(18, 22, 30, 0.92); --line: #2a3140; --txt: #dde3ea; --muted: #8b95a5; --acc: #4ea1ff; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: var(--bg); color: var(--txt); font: 13px/1.4 "Segoe UI", system-ui, sans-serif; }
+  #c { position: fixed; inset: 0; }
+  #panel { position: fixed; top: 12px; left: 12px; bottom: 12px; width: 320px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; display: flex; flex-direction: column; backdrop-filter: blur(6px); }
+  #panel header { padding: 12px 14px 8px; border-bottom: 1px solid var(--line); }
+  #panel h1 { font-size: 15px; margin: 0 0 2px; }
+  #panel .sub { color: var(--muted); font-size: 12px; }
+  #scroll { overflow-y: auto; padding: 8px 10px 12px; flex: 1; }
+  h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 14px 4px 6px; }
+  .btns { display: flex; flex-wrap: wrap; gap: 5px; }
+  button { background: #1d2430; color: var(--txt); border: 1px solid var(--line); border-radius: 6px; padding: 5px 9px; cursor: pointer; font: inherit; }
+  button:hover { border-color: var(--acc); }
+  button.on { background: #1f3a5c; border-color: var(--acc); }
+  .layer { border: 1px solid var(--line); border-radius: 8px; margin-bottom: 6px; background: rgba(255,255,255,0.02); }
+  .lhead { display: flex; align-items: center; gap: 8px; padding: 6px 8px; }
+  .lhead .sw { width: 12px; height: 12px; border-radius: 3px; flex: none; }
+  .lhead label { flex: 1; cursor: pointer; font-weight: 600; }
+  .lhead .tog { color: var(--muted); cursor: pointer; padding: 0 4px; user-select: none; }
+  .lop { display: flex; align-items: center; gap: 6px; padding: 0 8px 6px 28px; color: var(--muted); font-size: 11px; }
+  .lop input { flex: 1; }
+  .items { display: none; padding: 0 8px 6px 28px; }
+  .layer.open .items { display: block; }
+  .item { display: flex; align-items: center; gap: 6px; padding: 2px 0; cursor: pointer; }
+  .item span { flex: 1; }
+  .item .f { color: #ffb347; font-size: 11px; }
+  .row { display: flex; align-items: center; gap: 8px; margin: 6px 4px; }
+  .row input[type=range] { flex: 1; }
+  select { background: #1d2430; color: var(--txt); border: 1px solid var(--line); border-radius: 6px; padding: 4px; font: inherit; }
+  #info { position: fixed; right: 12px; top: 12px; width: 300px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 12px 14px; display: none; }
+  #info h3 { margin: 0 0 4px; font-size: 15px; }
+  #info .m { color: var(--muted); }
+  #info .find { margin-top: 8px; padding: 8px; border-radius: 6px; background: rgba(255,179,71,0.12); border: 1px solid rgba(255,179,71,0.4); color: #ffd59a; }
+  #info .x { position: absolute; right: 10px; top: 8px; cursor: pointer; color: var(--muted); }
+  #hover { position: fixed; pointer-events: none; background: rgba(0,0,0,0.75); padding: 3px 7px; border-radius: 4px; font-size: 12px; display: none; }
+  #legal { position: fixed; right: 12px; bottom: 10px; color: var(--muted); font-size: 11px; max-width: 520px; text-align: right; }
+  #slicebar { position: fixed; left: 344px; right: 300px; bottom: 14px; display: none; align-items: center; gap: 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px; }
+  #slicebar input[type=range] { flex: 1; height: 22px; }
+  #sliceLbl { min-width: 150px; font-variant-numeric: tabular-nums; color: var(--muted); }
+  #mini { position: fixed; right: 12px; bottom: 60px; width: 276px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 8px; display: none; }
+  #miniT { color: var(--muted); font-size: 11px; margin-bottom: 4px; }
+  #miniC { width: 260px; display: block; image-rendering: auto; border-radius: 4px; background: #000; }
+  #loading { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 16px; color: var(--muted); pointer-events: none; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="loading">Cargando modelos...</div>
+<div id="panel">
+  <header>
+    <select id="study" style="width:100%; margin-bottom:6px"></select>
+    <h1 id="title">TAC</h1>
+    <div class="sub" id="subtitle"></div>
+  </header>
+  <div id="scroll">
+    <h2>Vistas rapidas</h2>
+    <div class="row">
+      <select id="focusSel" style="flex:1"><option value="">Ver un organo: todo el cuerpo</option></select>
+    </div>
+    <div class="btns" id="presets">
+      <button data-p="todo">Todo</button>
+      <button data-p="sinpiel">Sin piel</button>
+      <button data-p="interior">Organos y vasos</button>
+      <button data-p="digestivo">Solo digestivo</button>
+      <button data-p="urinario">Vias urinarias</button>
+      <button data-p="hueso">Solo hueso</button>
+      <button data-p="musculo">Musculo y hueso</button>
+      <button data-p="contenido">Contenido interno</button>
+      <button data-p="hallazgos">Hallazgos del informe</button>
+    </div>
+    <h2>Camara</h2>
+    <div class="btns" id="views">
+      <button data-v="front">Frente</button>
+      <button data-v="back">Atras</button>
+      <button data-v="right">Lado der.</button>
+      <button data-v="left">Lado izq.</button>
+      <button data-v="top">Arriba</button>
+      <button data-v="bottom">Abajo</button>
+      <button id="spin">Girar</button>
+    </div>
+    <h2>Capas</h2>
+    <div id="layers"></div>
+    <h2>Plano de corte</h2>
+    <div class="row">
+      <select id="cutAxis">
+        <option value="none">Sin corte</option>
+        <option value="axial">Axial (horizontal)</option>
+        <option value="coronal">Coronal (frente)</option>
+        <option value="sagital">Sagital (lado)</option>
+      </select>
+      <label><input type="checkbox" id="cutFlip"> invertir</label>
+    </div>
+    <div class="row">
+      <span style="color:var(--muted)">Grosor</span>
+      <select id="slab" style="flex:1">
+        <option value="0">Medio cuerpo</option>
+        <option value="5">Rodaja de 5 mm</option>
+        <option value="15">Rodaja de 15 mm</option>
+        <option value="40">Rodaja de 40 mm</option>
+      </select>
+    </div>
+    <div class="row">
+      <span style="color:var(--muted)">Interior</span>
+      <select id="capMode" style="flex:1">
+        <option value="1">TAC real de lo visible</option>
+        <option value="2">TAC real completa</option>
+        <option value="0">Hueco (solo superficie)</option>
+      </select>
+    </div>
+  </div>
+</div>
+<div id="slicebar">
+  <button id="sPrev" title="Corte anterior (flecha abajo)">&#9664;</button>
+  <button id="sPlay" title="Recorrer el cuerpo automaticamente">&#9654; Recorrer</button>
+  <button id="sNext" title="Corte siguiente (flecha arriba)">&#9654;</button>
+  <input type="range" id="cutPos" min="0" max="100" value="50">
+  <span id="sliceLbl"></span>
+  <select id="sSpeed" title="Velocidad">
+    <option value="160">lento</option>
+    <option value="70" selected>normal</option>
+    <option value="25">rapido</option>
+  </select>
+</div>
+<div id="mini"><div id="miniT"></div><canvas id="miniC"></canvas></div>
+<div id="info"><span class="x" id="infoX">x</span><h3 id="iName"></h3><div class="m" id="iMeta"></div><div id="iFind"></div>
+  <div class="btns" style="margin-top:8px"><button id="iFocus">Ver solo este organo y su contenido</button></div></div>
+<div id="hover"></div>
+<div id="legal">Modelo generado automaticamente con IA (TotalSegmentator) a partir de la TAC. Los colores son anatomicos ilustrativos, la forma y el tamano son los del estudio (precision ~1-4 mm). No reemplaza el informe del radiologo.</div>
+
+<script type="importmap">{ "imports": { "three": "./lib/three.module.js" } }</script>
+<script type="module">
+import * as THREE from "three";
+import { OrbitControls } from "./lib/jsm/controls/OrbitControls.js";
+import { GLTFLoader } from "./lib/jsm/loaders/GLTFLoader.js";
+import { RoomEnvironment } from "./lib/jsm/environments/RoomEnvironment.js";
+import { computeBoundsTree, acceleratedRaycast } from "./lib/three-mesh-bvh.module.js";
+
+THREE.BufferGeometry.prototype.computeBoundsTree = computeBoundsTree;
+THREE.Mesh.prototype.raycast = acceleratedRaycast;
+
+const LAYERS = [
+  { id: "Piel", color: "#e0ad8f" },
+  { id: "Musculo", color: "#9e2924" },
+  { id: "Hueso", color: "#ede3c7" },
+  { id: "Organos", color: "#7a2119" },
+  { id: "Urinario", color: "#c9a227" },
+  { id: "Digestivo", color: "#e39f8c" },
+  { id: "Vasos", color: "#c81010" },
+  { id: "Interior", color: "#5fb3e0" },
+];
+
+const canvas = document.getElementById("c");
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, powerPreference: "high-performance" });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 1.5));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 0.95;
+renderer.localClippingEnabled = true;
+
+const scene = new THREE.Scene();
+const bgCanvas = document.createElement("canvas");
+bgCanvas.width = 2; bgCanvas.height = 256;
+const g = bgCanvas.getContext("2d");
+const grad = g.createLinearGradient(0, 0, 0, 256);
+grad.addColorStop(0, "#1b2333"); grad.addColorStop(1, "#06080c");
+g.fillStyle = grad; g.fillRect(0, 0, 2, 256);
+scene.background = new THREE.CanvasTexture(bgCanvas);
+const pmrem = new THREE.PMREMGenerator(renderer);
+scene.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+
+const key = new THREE.DirectionalLight(0xfff2e6, 1.6); key.position.set(300, 500, 600); scene.add(key);
+const rim = new THREE.DirectionalLight(0x9fb8ff, 0.7); rim.position.set(-400, 200, -500); scene.add(rim);
+scene.add(new THREE.HemisphereLight(0xffffff, 0x302020, 0.35));
+
+const camera = new THREE.PerspectiveCamera(35, innerWidth / innerHeight, 1, 10000);
+const controls = new OrbitControls(camera, canvas);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+
+const root = new THREE.Group();
+scene.add(root);
+
+const clipPlane = new THREE.Plane(new THREE.Vector3(0, -1, 0), 0);
+const noClip = [];
+let clipping = noClip;
+
+const structures = [];
+const byLayer = {};
+let manifest, radius = 300;
+
+function makeMaterial(s, geometry) {
+  const c = new THREE.Color().setRGB(...s.color, THREE.SRGBColorSpace);
+  const isBone = s.layer === "Hueso";
+  const isSkin = s.layer === "Piel";
+  const m = new THREE.MeshStandardMaterial({
+    color: c,
+    vertexColors: !!geometry.attributes.color,
+    roughness: isBone ? 0.6 : isSkin ? 0.65 : 0.32,
+    metalness: 0,
+    envMapIntensity: isBone || isSkin ? 0.5 : 0.75,
+  });
+  return m;
+}
+
+let dirty = true;
+const redraw = () => { dirty = true; };
+
+function applyOpacity(s) {
+  const o = s.layerObj.opacity * s.baseOpacity * s.dim;
+  const transparent = o < 0.97;
+  const side = transparent || clipping.length ? THREE.DoubleSide : THREE.FrontSide;
+  if (s.mat.transparent !== transparent || s.mat.side !== side) {
+    s.mat.transparent = transparent;
+    s.mat.side = side;
+    s.mat.needsUpdate = true;
+  }
+  s.mat.opacity = o;
+  s.mat.depthWrite = !transparent;
+  s.mesh.renderOrder = transparent ? (s.layer === "Piel" ? 3 : 2) : 0;
+  s.mesh.visible = s.visible && s.layerObj.visible && o > 0.01;
+  lutDirty = true;
+  redraw();
+}
+
+// ---- interior: la TAC real pintada en la cara del corte ----
+let vol = null, lutDirty = true;
+const caps = [];
+const lutData = new Uint8Array(256 * 4);
+const lutTex = new THREE.DataTexture(lutData, 256, 1, THREE.RGBAFormat);
+const capMat = new THREE.ShaderMaterial({
+  side: THREE.DoubleSide,
+  uniforms: { uCT: { value: null }, uLab: { value: null }, uLut: { value: lutTex }, uW2I: { value: new THREE.Matrix4() },
+              uDims: { value: new THREE.Vector3() }, uMode: { value: 1 } },
+  vertexShader: `varying vec3 vWorld;
+    void main() { vec4 w = modelMatrix * vec4(position, 1.0); vWorld = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`,
+  fragmentShader: `precision highp sampler3D;
+    uniform sampler3D uCT; uniform sampler3D uLab; uniform sampler2D uLut; uniform mat4 uW2I; uniform vec3 uDims; uniform int uMode;
+    varying vec3 vWorld;
+    void main() {
+      vec3 p = (uW2I * vec4(vWorld, 1.0)).xyz;
+      if (any(lessThan(p, vec3(-0.5))) || any(greaterThan(p, uDims - 0.5))) discard;
+      // mezcla trilineal de las 8 etiquetas vecinas: bordes suaves en vez de escalones de voxel
+      vec3 b = floor(p), f = p - b;
+      ivec3 hi = ivec3(uDims) - 1;
+      vec3 tint = vec3(0.0);
+      float wTint = 0.0, wVis = 0.0, wBody = 0.0, alpha = 0.0;
+      for (int k = 0; k < 8; k++) {
+        ivec3 o = ivec3(k & 1, (k >> 1) & 1, (k >> 2) & 1);
+        vec3 fo = vec3(o);
+        float w = mix(1.0 - f.x, f.x, fo.x) * mix(1.0 - f.y, f.y, fo.y) * mix(1.0 - f.z, f.z, fo.z);
+        float lab = floor(texelFetch(uLab, clamp(ivec3(b) + o, ivec3(0), hi), 0).r * 255.0 + 0.5);
+        if (lab < 0.5) continue;
+        vec4 t = texture2D(uLut, vec2((lab + 0.5) / 256.0, 0.5));
+        wBody += w;
+        if (t.a > 0.004) { wVis += w; alpha += w * t.a; }
+        if (lab < 254.5 && t.a > 0.004) { tint += w * t.rgb; wTint += w; }
+      }
+      float cover = uMode == 1 ? wVis : wBody;
+      if (cover < 0.5) discard;
+      float g = texture(uCT, (p + 0.5) / uDims).r;
+      vec3 col = vec3(g);
+      if (wTint > 0.001) col = mix(col, (tint / wTint) * (0.3 + 1.2 * g), 0.32 * min(wTint * 2.0, 1.0));
+      gl_FragColor = vec4(col, uMode == 1 ? alpha / max(wVis, 1e-3) : 1.0);
+    }`,
+});
+capMat.transparent = true;
+
+function updateLut() {
+  lutData.fill(0);
+  structures.forEach((s, i) => {
+    const c = new THREE.Color().setRGB(...s.color);
+    lutData.set([c.r * 255, c.g * 255, c.b * 255, s.mesh.visible ? Math.max(2, s.mat.opacity * 255) : 0], (i + 1) * 4);
+  });
+  const skin = structures.find(s => s.layer === "Piel");
+  lutData[255 * 4 + 3] = skin && skin.mesh.visible ? 255 : 0;
+  lutTex.needsUpdate = true;
+  lutDirty = false;
+  if (lastAxis !== "none") drawMini(lastAxis, +posEl.value);
+}
+
+async function loadVolume(base) {
+  const v = manifest.volume;
+  if (!v) return;
+  const [ct, lab] = await Promise.all(["volumen.bin", "etiquetas.bin"].map(async f =>
+    new Uint8Array(await (await fetch(`${base}${f}?v=${manifest.generado || ""}`)).arrayBuffer())));
+  const mk = (data, filter) => {
+    const t = new THREE.Data3DTexture(data, ...v.dims);
+    t.format = THREE.RedFormat; t.type = THREE.UnsignedByteType;
+    t.minFilter = t.magFilter = filter; t.unpackAlignment = 1; t.needsUpdate = true;
+    return t;
+  };
+  capMat.uniforms.uCT.value = mk(ct, THREE.LinearFilter);
+  capMat.uniforms.uLab.value = mk(lab, THREE.NearestFilter);
+  capMat.uniforms.uDims.value.set(...v.dims);
+  root.updateMatrixWorld();
+  const i2w = new THREE.Matrix4().copy(root.matrixWorld).multiply(new THREE.Matrix4().set(...v.ijk_to_three));
+  capMat.uniforms.uW2I.value.copy(i2w).invert();
+  // para cada eje de pantalla (0=X sagital, 1=Y axial, 2=Z coronal): que eje de voxel lo recorre, en que sentido y cada cuantos mm
+  const e = i2w.elements;
+  const col = c => [e[c * 4], e[c * 4 + 1], e[c * 4 + 2]];
+  const axes = [0, 1, 2].map(a => {
+    const c = [0, 1, 2].reduce((best, c) => Math.abs(col(c)[a]) > Math.abs(col(best)[a]) ? c : best, 0);
+    return { vi: c, sign: Math.sign(col(c)[a]), mm: Math.hypot(...col(c)), n: v.dims[c] };
+  });
+  vol = { ct, lab, dims: v.dims, i2w, axes };
+  const size = Math.max(...manifest.size) * 3;
+  for (let k = 0; k < 2; k++) {
+    const c = new THREE.Mesh(new THREE.PlaneGeometry(1, 1), capMat);
+    c.scale.setScalar(size);
+    c.visible = false;
+    scene.add(c);
+    caps.push(c);
+  }
+}
+
+function placeCaps() {
+  const mode = +document.getElementById("capMode").value;
+  capMat.uniforms.uMode.value = mode;
+  caps.forEach((c, k) => {
+    const pl = clipping[k];
+    c.visible = !!pl && mode > 0;
+    if (!c.visible) return;
+    c.position.copy(pl.normal).multiplyScalar(-pl.constant + 0.05);
+    c.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), pl.normal);
+  });
+}
+
+// ---- vista 2D del corte actual ----
+const miniC = document.getElementById("miniC");
+const miniCtx = miniC.getContext("2d");
+const SCREEN = {  // eje 3D de la pantalla horizontal y vertical (con sentido) para cada plano
+  axial: { fix: 1, h: [0, 1], v: [2, -1] },
+  coronal: { fix: 2, h: [0, 1], v: [1, -1] },
+  sagital: { fix: 0, h: [2, -1], v: [1, -1] },
+};
+function drawMini(axis, slice) {
+  const box = document.getElementById("mini");
+  if (!vol || axis === "none") { box.style.display = "none"; return; }
+  box.style.display = "block";
+  const S = SCREEN[axis], A = vol.axes;
+  const H = A[S.h[0]], V = A[S.v[0]], F = A[S.fix];
+  const W = H.n, Hh = V.n, [nx, ny] = vol.dims;
+  if (miniC.width !== W || miniC.height !== Hh) { miniC.width = W; miniC.height = Hh; }
+  miniC.style.height = Math.round(260 * (Hh * V.mm) / (W * H.mm)) + "px";
+  const img = miniCtx.createImageData(W, Hh), d = img.data;
+  const idx = [0, 0, 0];
+  const fixIdx = F.sign > 0 ? slice : F.n - 1 - slice;
+  idx[F.vi] = fixIdx;
+  const capMode = +document.getElementById("capMode").value;
+  for (let y = 0; y < Hh; y++) {
+    idx[V.vi] = (V.sign * S.v[1]) > 0 ? y : Hh - 1 - y;
+    for (let x = 0; x < W; x++) {
+      idx[H.vi] = (H.sign * S.h[1]) > 0 ? x : W - 1 - x;
+      const o = idx[0] + nx * (idx[1] + ny * idx[2]);
+      let r = vol.ct[o], g = r, b = r;
+      const l = vol.lab[o], p = (y * W + x) * 4;
+      if (l > 0 && l < 255 && lutData[l * 4 + 3] > 0 && capMode > 0) {
+        r = r * 0.62 + lutData[l * 4] * 0.38; g = g * 0.62 + lutData[l * 4 + 1] * 0.38; b = b * 0.62 + lutData[l * 4 + 2] * 0.38;
+      }
+      d[p] = r; d[p + 1] = g; d[p + 2] = b; d[p + 3] = 255;
+    }
+  }
+  miniCtx.putImageData(img, 0, 0);
+}
+
+function refreshAll() { structures.forEach(applyOpacity); }
+
+function buildUI() {
+  const box = document.getElementById("layers");
+  for (const L of LAYERS) {
+    const items = structures.filter(s => s.layer === L.id);
+    if (!items.length) continue;
+    const lo = byLayer[L.id] = { visible: true, opacity: 1, el: null, items };
+    const el = document.createElement("div");
+    el.className = "layer";
+    el.innerHTML = `
+      <div class="lhead"><span class="sw" style="background:${L.color}"></span>
+        <input type="checkbox" checked id="L_${L.id}"><label for="L_${L.id}">${L.id === "Organos" ? "Organos" : L.id}</label>
+        <span class="tog">${items.length} &#9662;</span></div>
+      <div class="lop">opacidad <input type="range" min="0" max="100" value="100"></div>
+      <div class="items"></div>`;
+    lo.el = el;
+    el.querySelector(".tog").onclick = () => el.classList.toggle("open");
+    const cb = el.querySelector("input[type=checkbox]");
+    cb.onchange = () => { lo.visible = cb.checked; refreshAll(); };
+    const rng = el.querySelector("input[type=range]");
+    rng.oninput = () => { lo.opacity = rng.value / 100; refreshAll(); };
+    lo.cb = cb; lo.rng = rng;
+    const list = el.querySelector(".items");
+    for (const s of items) {
+      const it = document.createElement("label");
+      it.className = "item";
+      it.innerHTML = `<input type="checkbox" checked><span>${s.name}</span>${s.finding ? '<span class="f">hallazgo</span>' : ""}`;
+      const c = it.querySelector("input");
+      c.onchange = () => { s.visible = c.checked; applyOpacity(s); };
+      it.querySelector("span").onclick = (e) => { e.preventDefault(); select(s); };
+      s.cb = c;
+      list.appendChild(it);
+    }
+    box.appendChild(el);
+  }
+}
+
+function setLayer(id, visible, opacity = 1) {
+  const lo = byLayer[id]; if (!lo) return;
+  lo.visible = visible; lo.opacity = opacity;
+  lo.cb.checked = visible; lo.rng.value = Math.round(opacity * 100);
+}
+
+function preset(p) {
+  if (focus) { focus = null; document.getElementById("focusSel").value = ""; view("front"); }
+  document.querySelectorAll("#presets button").forEach(b => b.classList.toggle("on", b.dataset.p === p));
+  structures.forEach(s => { s.visible = !s.hidden; s.cb.checked = s.visible; s.dim = 1; s.mat.emissive.setRGB(0, 0, 0); });
+  const all = (v, o) => LAYERS.forEach(L => setLayer(L.id, v, o));
+  if (p === "todo") all(true, 1);
+  if (p === "sinpiel") { all(true, 1); setLayer("Piel", false); }
+  if (p === "interior") { all(true, 1); setLayer("Piel", false); setLayer("Musculo", false); setLayer("Hueso", true, 0.25); }
+  if (p === "hueso") { all(false); setLayer("Hueso", true, 1); }
+  if (p === "digestivo") { all(false); setLayer("Digestivo", true, 1); setLayer("Hueso", true, 0.15); }
+  if (p === "musculo") { all(false); setLayer("Hueso", true, 1); setLayer("Musculo", true, 1); }
+  if (p === "urinario") { all(false); setLayer("Urinario", true, 1); setLayer("Hueso", true, 0.2); setLayer("Vasos", true, 0.35); }
+  if (p === "contenido") {
+    all(true, 0.16); setLayer("Piel", false); setLayer("Musculo", false); setLayer("Hueso", true, 0.12);
+    setLayer("Vasos", true, 0.8); setLayer("Interior", true, 1);
+    structures.filter(s => s.key === "pared_digestiva").forEach(s => { s.visible = false; s.cb.checked = false; });
+  }
+  if (p === "hallazgos") {
+    all(true, 1); setLayer("Piel", true, 0.2); setLayer("Musculo", false);
+    structures.forEach(s => {
+      if (s.finding) { s.mat.emissive.setRGB(0.25, 0.12, 0); }
+      else if (s.layer !== "Piel") s.dim = s.layer === "Hueso" ? 0.35 : 0.15;
+    });
+  }
+  refreshAll();
+}
+
+let selected = null;
+function select(s) {
+  if (selected && selected !== s && !selected.finding) selected.mat.emissive.setRGB(0, 0, 0);
+  selected = s;
+  redraw();
+  if (!s) { document.getElementById("info").style.display = "none"; return; }
+  if (!s.finding) s.mat.emissive.setRGB(0.12, 0.12, 0.16);
+  document.getElementById("info").style.display = "block";
+  document.getElementById("iName").textContent = s.name;
+  document.getElementById("iMeta").textContent = `Capa: ${s.layer}${s.parent ? " (dentro de: " + s.parent + ")" : ""}`
+    + ` - Volumen segmentado: ${s.volume_cm3} cm3`;
+  document.getElementById("iFind").innerHTML = s.finding ? `<div class="find">${s.finding}</div>` : "";
+}
+document.getElementById("infoX").onclick = () => select(null);
+
+let focus = null;
+
+function contentsOf(s) {
+  const inside = new Set(s.contenido || []);
+  return structures.filter(x => x !== s && !x.hidden && (inside.has(x.key) || x.parent === s.name));
+}
+
+function isolate(s, v = "front") {
+  const sel = document.getElementById("focusSel");
+  if (!s) { focus = null; sel.value = ""; preset("todo"); view("front"); return; }
+  document.querySelectorAll("#presets button").forEach(b => b.classList.remove("on"));
+  const inside = contentsOf(s);
+  LAYERS.forEach(L => setLayer(L.id, true, 1));
+  structures.forEach(x => {
+    x.visible = x === s || inside.includes(x);
+    x.cb.checked = x.visible; x.dim = 1; x.mat.emissive.setRGB(0, 0, 0);
+  });
+  // organo semitransparente para ver lo que tiene dentro
+  if (inside.length) s.dim = Math.min(1, 0.3 / (s.baseOpacity || 1));
+  inside.forEach(x => { if (x.finding) x.mat.emissive.setRGB(0.25, 0.12, 0); });
+  refreshAll();
+  const box = new THREE.Box3().setFromObject(s.mesh);
+  focus = { center: box.getCenter(new THREE.Vector3()), radius: Math.max(15, box.getSize(new THREE.Vector3()).length() / 2) };
+  sel.value = s.key;
+  view(v);
+  select(s);
+}
+
+function view(v) {
+  const r = focus ? focus.radius : radius;
+  const t = focus ? focus.center : new THREE.Vector3();
+  const d = r * (focus ? 3.2 : 3.6);
+  const dirs = { front: [0, 0, 1], back: [0, 0, -1], right: [-1, 0, 0], left: [1, 0, 0], top: [0, 1, 0.001], bottom: [0, -1, 0.001] };
+  const [x, y, z] = dirs[v];
+  camera.position.set(t.x + x * d, t.y + y * d + (v === "front" || v === "back" ? r * 0.15 : 0), t.z + z * d);
+  controls.target.copy(t);
+  camera.up.set(0, 1, 0);
+  controls.update();
+}
+
+const clipPlane2 = new THREE.Plane();
+const oneClip = [clipPlane], twoClip = [clipPlane, clipPlane2];
+const AXIS = { sagital: 0, axial: 1, coronal: 2 };
+const AXIS_NAME = { axial: "Axial", coronal: "Coronal", sagital: "Sagital" };
+const posEl = document.getElementById("cutPos");
+let lastAxis = "none";
+
+function sliceCoord(a, s) {
+  // coordenada de mundo (eje a) del centro del corte s
+  const A = vol.axes[a], ijk = vol.dims.map(n => (n - 1) / 2);
+  ijk[A.vi] = A.sign > 0 ? s : A.n - 1 - s;
+  return new THREE.Vector3(...ijk).applyMatrix4(vol.i2w).getComponent(a);
+}
+
+function updateClip() {
+  const axis = document.getElementById("cutAxis").value;
+  const flip = document.getElementById("cutFlip").checked ? -1 : 1;
+  const slab = +document.getElementById("slab").value;
+  document.getElementById("slicebar").style.display = axis === "none" ? "none" : "flex";
+  if (axis === "none") stopPlay();
+  const prev = clipping;
+  let label = "";
+  if (axis === "none") clipping = noClip;
+  else {
+    const a = AXIS[axis];
+    let w;
+    if (vol) {
+      const n = vol.axes[a].n;
+      if (axis !== lastAxis) { posEl.max = n - 1; if (+posEl.dataset.init !== 1) posEl.value = Math.floor(n / 2); }
+      const s = +posEl.value;
+      w = sliceCoord(a, s);
+      label = `corte ${s + 1} / ${n} - ${(s * vol.axes[a].mm).toFixed(0)} mm`;
+    } else {
+      if (axis !== lastAxis) { posEl.max = 1000; posEl.value = 500; }
+      w = -manifest.size[a] / 2 + posEl.value / 1000 * manifest.size[a];
+    }
+    const e = new THREE.Vector3().setComponent(a, 1);
+    clipPlane.normal.copy(e).multiplyScalar(-flip);
+    clipPlane.constant = w * flip;
+    if (slab > 0) {
+      clipPlane2.normal.copy(e).multiplyScalar(flip);
+      clipPlane2.constant = -(w - slab * flip) * flip;
+    }
+    clipping = slab > 0 ? twoClip : oneClip;
+  }
+  posEl.dataset.init = 0;
+  lastAxis = axis;
+  document.getElementById("sliceLbl").textContent = label;
+  if (prev !== clipping) {
+    structures.forEach(s => { s.mat.clippingPlanes = clipping; s.mat.needsUpdate = true; });
+    refreshAll();
+  }
+  placeCaps();
+  if (axis !== "none" && vol) {
+    document.getElementById("miniT").textContent = `${AXIS_NAME[axis]} - ${label} (TAC real)`;
+    drawMini(axis, +posEl.value);
+  } else drawMini("none");
+  redraw();
+}
+["cutAxis", "cutFlip", "cutPos", "capMode", "slab"].forEach(id => document.getElementById(id).addEventListener("input", updateClip));
+
+function step(d) {
+  const max = +posEl.max;
+  let v = +posEl.value + d;
+  if (v > max) v = 0;
+  if (v < 0) v = max;
+  posEl.value = v;
+  updateClip();
+}
+let playTimer = null;
+const playBtn = document.getElementById("sPlay");
+function stopPlay() { clearInterval(playTimer); playTimer = null; playBtn.innerHTML = "&#9654; Recorrer"; }
+playBtn.onclick = () => {
+  if (playTimer) return stopPlay();
+  playBtn.innerHTML = "&#10074;&#10074; Pausa";
+  playTimer = setInterval(() => step(1), +document.getElementById("sSpeed").value);
+};
+document.getElementById("sSpeed").onchange = () => { if (playTimer) { stopPlay(); playBtn.click(); } };
+document.getElementById("sPrev").onclick = () => step(-1);
+document.getElementById("sNext").onclick = () => step(1);
+addEventListener("keydown", e => {
+  if (document.getElementById("cutAxis").value === "none" || e.target.tagName === "SELECT") return;
+  const d = { ArrowUp: 1, ArrowRight: 1, ArrowDown: -1, ArrowLeft: -1, PageUp: 10, PageDown: -10 }[e.key];
+  if (d) { e.preventDefault(); step(d); }
+  if (e.key === " ") { e.preventDefault(); playBtn.click(); }
+});
+for (const id of ["slicebar", "mini"])
+  document.getElementById(id).addEventListener("wheel", e => { e.preventDefault(); step(e.deltaY > 0 ? -1 : 1); }, { passive: false });
+
+const ray = new THREE.Raycaster();
+const mouse = new THREE.Vector2();
+function pick(ev) {
+  mouse.set((ev.clientX / innerWidth) * 2 - 1, -(ev.clientY / innerHeight) * 2 + 1);
+  ray.setFromCamera(mouse, camera);
+  ray.firstHitOnly = clipping.length === 0;
+  const vis = structures.filter(s => s.mesh.visible && s.mat.opacity > 0.3 && s.layer !== "Piel").map(s => s.mesh);
+  const skin = structures.filter(s => s.mesh.visible && s.layer === "Piel" && s.mat.opacity > 0.6).map(s => s.mesh);
+  const hits = ray.intersectObjects([...vis, ...skin], true)
+    .filter(h => clipping.every(pl => pl.distanceToPoint(h.point) >= 0));
+  return hits.length ? hits[0].object.userData.s : null;
+}
+let down = null;
+canvas.addEventListener("pointerdown", e => down = [e.clientX, e.clientY]);
+canvas.addEventListener("pointerup", e => {
+  if (down && Math.hypot(e.clientX - down[0], e.clientY - down[1]) < 4) select(pick(e));
+});
+const hov = document.getElementById("hover");
+let hoverEvent = null;
+canvas.addEventListener("pointermove", e => {
+  if (e.buttons) { hov.style.display = "none"; hoverEvent = null; return; }
+  if (!hoverEvent) requestAnimationFrame(() => {
+    const ev = hoverEvent; hoverEvent = null;
+    if (!ev) return;
+    const s = pick(ev);
+    if (s) { hov.textContent = s.name; hov.style.display = "block"; hov.style.left = ev.clientX + 14 + "px"; hov.style.top = ev.clientY + 10 + "px"; }
+    else hov.style.display = "none";
+  });
+  hoverEvent = e;
+});
+controls.addEventListener("change", redraw);
+
+document.querySelectorAll("#presets button").forEach(b => b.onclick = () => preset(b.dataset.p));
+document.querySelectorAll("#views button[data-v]").forEach(b => b.onclick = () => view(b.dataset.v));
+const spinBtn = document.getElementById("spin");
+spinBtn.onclick = () => { controls.autoRotate = !controls.autoRotate; spinBtn.classList.toggle("on", controls.autoRotate); };
+controls.autoRotateSpeed = 1.5;
+
+function fit() {
+  camera.aspect = innerWidth / innerHeight;
+  camera.setViewOffset(innerWidth, innerHeight, -170, 0, innerWidth, innerHeight);
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+  redraw();
+}
+fit();
+addEventListener("resize", fit);
+
+async function main() {
+  const studies = await (await fetch("../estudios/estudios.json", { cache: "no-store" })).json();
+  const id = new URLSearchParams(location.search).get("e") || studies[studies.length - 1]?.id;
+  const sel = document.getElementById("study");
+  for (const st of studies) sel.add(new Option(`${st.id} - ${st.titulo}`, st.id, false, st.id === id));
+  sel.onchange = () => { location.search = "?e=" + encodeURIComponent(sel.value); };
+  const base = `../estudios/${encodeURIComponent(id)}/web/`;
+  manifest = await (await fetch(base + "manifest.json", { cache: "no-store" })).json();
+  const info = manifest.estudio || {};
+  document.getElementById("title").textContent = info.titulo || "TAC";
+  document.getElementById("subtitle").textContent = info.subtitulo || "";
+  document.title = `Reconstruccion 3D - ${info.titulo || id}`;
+  const c = manifest.center;
+  root.position.set(-c[0], -c[1], -c[2]);
+  radius = Math.max(...manifest.size) / 2;
+  const loader = new GLTFLoader();
+  const loading = document.getElementById("loading");
+  let done = 0;
+  await Promise.all(manifest.structures.map(async s => {
+    const gltf = await loader.loadAsync(`${base}${s.key}.glb?v=${manifest.generado || ""}`);
+    let mesh;
+    gltf.scene.traverse(o => { if (o.isMesh && !mesh) mesh = o; });
+    const mat = makeMaterial(s, mesh.geometry);
+    mesh.geometry.computeVertexNormals();
+    mesh.geometry.computeBoundsTree();
+    mesh = new THREE.Mesh(mesh.geometry, mat);
+    const st = { ...s, mesh, mat, visible: !s.hidden, dim: 1, baseOpacity: s.layer === "Piel" ? 1 : (s.opacity ?? 1) };
+    mesh.userData.s = st;
+    for (const p of s.markers || []) {
+      const halo = new THREE.Mesh(new THREE.SphereGeometry(8, 24, 16),
+        new THREE.MeshBasicMaterial({ color: 0xffd34d, transparent: true, opacity: 0.25, depthWrite: false }));
+      halo.position.set(...p);
+      halo.renderOrder = 4;
+      halo.userData.s = st;
+      mesh.add(halo);
+    }
+    root.add(mesh);
+    structures.push(st);
+    loading.textContent = `Cargando modelos... ${++done}/${manifest.structures.length}`;
+  }));
+  const order = manifest.structures.map(s => s.key);
+  structures.sort((a, b) => order.indexOf(a.key) - order.indexOf(b.key));
+  loading.textContent = "Cargando volumen de la TAC...";
+  await loadVolume(base);
+  loading.remove();
+  buildUI();
+  const fsel = document.getElementById("focusSel");
+  for (const L of LAYERS) {
+    const items = structures.filter(s => s.layer === L.id && L.id !== "Piel" && L.id !== "Interior");
+    if (!items.length) continue;
+    const g = document.createElement("optgroup");
+    g.label = L.id;
+    items.forEach(s => g.appendChild(new Option(s.name + (contentsOf(s).length ? ` (+${contentsOf(s).length})` : ""), s.key)));
+    fsel.appendChild(g);
+  }
+  fsel.onchange = () => isolate(structures.find(s => s.key === fsel.value));
+  document.getElementById("iFocus").onclick = () => selected && isolate(selected);
+  document.querySelectorAll("#presets button").forEach(b => {
+    const need = { digestivo: "Digestivo", urinario: "Urinario", hueso: "Hueso", musculo: "Musculo", contenido: "Interior" }[b.dataset.p];
+    if (need && !byLayer[need]) b.style.display = "none";
+  });
+  structures.forEach(s => s.layerObj = byLayer[s.layer]);
+  const [p, v, cut, pos, organ] = location.hash.slice(1).split(",");
+  preset(p || "todo");
+  view(v || "front");
+  if (organ) isolate(structures.find(s => s.key === organ), v || "front");
+  if (pos) { posEl.max = 100000; posEl.value = pos; posEl.dataset.init = 1; }
+  if (cut) { document.getElementById("cutAxis").value = cut; updateClip(); }
+}
+main();
+
+renderer.setAnimationLoop(() => {
+  controls.update();
+  if (!dirty) return;
+  dirty = false;
+  if (lutDirty && structures.length) updateLut();
+  renderer.render(scene, camera);
+});
+</script>
+</body>
+</html>
