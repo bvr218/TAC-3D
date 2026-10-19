@@ -1,6 +1,6 @@
 ; Inno Setup 6: instalador de TAC 3D. Se compila desde compilar.ps1 (pasa /DDist=carpeta TAC3D de PyInstaller).
 #define AppName "TAC 3D"
-#define AppVer "1.1.0"
+#define AppVer "1.1.1"
 #ifndef Dist
   #define Dist "..\..\dist\TAC3D"
 #endif

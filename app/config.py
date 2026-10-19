@@ -6,7 +6,7 @@ import subprocess
 import sys
 
 APP_NAME = "TAC 3D"
-VERSION = "1.1.0"
+VERSION = "1.1.1"
 
 FROZEN = getattr(sys, "frozen", False)
 # recursos empaquetados (pipeline, visor, uv.exe); en desarrollo, la raiz del proyecto
