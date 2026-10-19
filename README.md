@@ -29,7 +29,7 @@ Imágenes de control de la segmentación (cortes axiales):
 
 1. Descarga [TAC3D_Instalador_1.1.0.exe](https://github.com/bvr218/TAC-3D/releases/download/v1.1.0/TAC3D_Instalador_1.1.0.exe).
 2. Ejecútalo. No necesita permisos de administrador; se instala en `%LOCALAPPDATA%\Programs\TAC 3D`. Si Windows SmartScreen avisa, pulsa *Más información → Ejecutar de todas formas* (el instalador no está firmado).
-3. Abre **TAC 3D** y ve a la página **Equipo y motor**: comprueba los requisitos y pulsa **Instalar motor de IA**. La primera vez descarga PyTorch, TotalSegmentator y los modelos (unos 7-10 GB), por lo que hace falta internet.
+3. Abre **TAC 3D** y ve a la página **Equipo y motor**: comprueba los requisitos y pulsa **Instalar motor de IA**. Este paso pide permisos de administrador: Windows mostrará el aviso de control de cuentas (UAC) y TAC 3D se volverá a abrir como administrador para continuar la instalación. La primera vez descarga PyTorch, TotalSegmentator y los modelos (unos 7-10 GB), por lo que hace falta internet.
 4. Pulsa **Agregar estudio** (o arrastra el `.zip` del TAC a la ventana). La app valida el estudio, elige la mejor serie y lo pone en la cola de procesamiento.
 5. Al terminar, abre el estudio en el visor 3D.
 

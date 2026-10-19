@@ -1,6 +1,8 @@
 """Rutas y configuracion persistente de la app de escritorio."""
+import ctypes
 import json
 import os
+import subprocess
 import sys
 
 APP_NAME = "TAC 3D"
@@ -31,6 +33,23 @@ def uv_exe():
         if os.path.exists(p):
             return p
     return None
+
+
+def is_admin():
+    try:
+        return bool(ctypes.windll.shell32.IsUserAnAdmin())
+    except Exception:
+        return False
+
+
+def relaunch_admin(args):
+    """Reabre la app como administrador (UAC) con esos argumentos. False si el usuario lo rechaza."""
+    params = list(args) if FROZEN else [os.path.abspath(sys.argv[0]), *args]
+    try:
+        r = ctypes.windll.shell32.ShellExecuteW(None, "runas", sys.executable, subprocess.list2cmdline(params), None, 1)
+    except Exception:
+        return False
+    return r > 32
 
 
 def motor_candidates():

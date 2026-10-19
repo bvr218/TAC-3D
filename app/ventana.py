@@ -778,6 +778,7 @@ class SystemPage(QWidget):
         self.installer = None
         self.state = None
         self.worker = None
+        self.auto_install = None
 
     def check(self):
         if self.worker and self.worker.isRunning():
@@ -812,19 +813,41 @@ class SystemPage(QWidget):
             self.l_motor.setText("No instalado. La instalacion descarga Python, PyTorch, TotalSegmentator y los modelos "
                                  "de IA (necesita internet; tarda de 10 a 40 minutos segun la conexion). Solo se hace una vez.")
             self.b_inst.setText("Instalar motor de IA")
+        if self.auto_install:
+            self.main._warned = True
         self.main.motor_changed(m)
+        if self.auto_install:
+            dev, self.auto_install = self.auto_install, None
+            self.c_dev.setCurrentIndex(max(0, self.c_dev.findData(dev)))
+            self.start_install()
 
     def install(self):
         if self.installer:
             return
         m = self.state[1] if self.state else {"ok": False}
-        dev = self.c_dev.currentData()
         if m.get("ok") and not requisitos.models_missing():
             if QMessageBox.question(self, "Reinstalar", "El motor ya esta instalado. ¿Reinstalarlo desde cero?") != QMessageBox.Yes:
                 return
         if self.main.runner.busy():
             QMessageBox.warning(self, "Ocupado", "Espera a que termine el procesamiento en curso.")
             return
+        if not config.is_admin():
+            if QMessageBox.question(self, "Permisos de administrador",
+                                    "Instalar el motor de IA requiere permisos de administrador.\n\n"
+                                    "TAC 3D se cerrara y se volvera a abrir como administrador para continuar "
+                                    "con la instalacion. ¿Continuar?") != QMessageBox.Yes:
+                return
+            if not config.relaunch_admin(["--instalar-motor", self.c_dev.currentData()]):
+                QMessageBox.warning(self, "Permisos de administrador",
+                                    "No se concedieron los permisos de administrador; el motor de IA no se instalo.")
+                return
+            self.main.close()
+            return
+        self.start_install()
+
+    def start_install(self):
+        m = self.state[1] if self.state else {"ok": False}
+        dev = self.c_dev.currentData()
         only_models = m.get("ok") and requisitos.models_missing()
         self.ibar.show()
         self.ilog.show()

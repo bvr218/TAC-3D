@@ -33,9 +33,17 @@ def main():
     if os.path.exists(ico):
         app.setWindowIcon(QIcon(ico))
 
+    argv = sys.argv[1:]
+    auto_install = None
+    if "--instalar-motor" in argv:
+        i = argv.index("--instalar-motor")
+        auto_install = (argv[i + 1:i + 2] or ["gpu"])[0]
+        del argv[i:i + 2]
+
     lock = QLockFile(os.path.join(config.DATA, "app.lock"))
     lock.setStaleLockTime(0)
-    if not lock.tryLock(100):
+    # al reabrirse como administrador, la instancia anterior tarda un momento en cerrarse
+    if not lock.tryLock(30000 if auto_install else 100):
         QMessageBox.information(None, config.APP_NAME, "TAC 3D ya esta abierto.")
         return 0
 
@@ -47,7 +55,10 @@ def main():
     cfg.save()
     win = MainWindow(cfg, Server(cfg), Runner(cfg))
     win.show()
-    args = [a for a in sys.argv[1:] if os.path.exists(a)]
+    if auto_install:
+        win.system.auto_install = auto_install
+        win.go("equipo")
+    args = [a for a in argv if os.path.exists(a)]
     if args:
         win.add_study(args[0])
     return app.exec()
